@@ -4,6 +4,7 @@ import tensorflow as tf
 import time
 from dqn_agent import DqnAgent
 from dqn_network import DqnNetwork
+from replay_memory import ReplayMemory
 
 
 class AcrobatNn(DqnNetwork):
@@ -114,7 +115,7 @@ state_space = len(observation)
 action_space = env.action_space.n
 model = AcrobatNn(session, state_space, action_space, LEARNING_RATE, DISCOUNT_RATE)
 target = AcrobatNn(session, state_space, action_space, LEARNING_RATE, DISCOUNT_RATE)
-agent = DqnAgent(session, action_space, model, target)
+agent = DqnAgent(session, action_space, model, target, ReplayMemory())
 step = 0
 saver = tf.train.Saver(agent.get_tf_variables())
 saver.restore(session, save_path='save/result')
@@ -132,8 +133,8 @@ for ep in range(total_episode):
             env.render()
             time.sleep(0.05)
         if done:
-            agent.update(step, observation, 1000, done)
+            agent.update(observation, 1000, done)
             print(str(ep)+": Eposode done "+str(t)+":  "+str(agent.explore_rate))
             break
 
-        agent.update(step, observation, reward, done)
+        agent.update(observation, reward, done)

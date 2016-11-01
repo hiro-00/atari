@@ -1,21 +1,23 @@
 import gym
 import time
+import random
 import numpy as np
 import tensorflow as tf
 from dqn_agent import DqnAgent
 from dqn_network import DqnNetwork
+from replay_memory import ReplayMemory
 
 import functools
 class AtariNetwork(DqnNetwork):
-    def __init__(self, session, input_width, input_height, action_space, learning_rate = 0.00025 , discount_rate = 0.99):
+    def __init__(self, session, input_width, input_height, frame_num, action_space, learning_rate = 0.00025 , discount_rate = 0.99):
         super(AtariNetwork, self).__init__(session, action_space, learning_rate, discount_rate)
         self.MIN_GRAD = 0.01
         self.MOMENTUM = 0.95
 
-        self.input = tf.placeholder('float32', [None, input_width, input_height, 1], name='input')
-        conv1 = self._add_conv_layer(self.input, 8, 1, 32, 4)
-        conv2 = self._add_conv_layer(conv1, 8, 32, 64, 2)
-        conv3 = self._add_conv_layer(conv2, 3, 64, 64, 1)
+        self.input = tf.placeholder('float32', [None, input_width, input_height, frame_num], name='input')
+        conv1 = self._add_conv_layer(self.input, filter_size=8, color_channel=frame_num, filter_num=32, stride=4)
+        conv2 = self._add_conv_layer(conv1, filter_size=8, color_channel=32, filter_num=64, stride=2)
+        conv3 = self._add_conv_layer(conv2, filter_size=3, color_channel=64, filter_num=64, stride=1)
 
         conv3_shape = conv3.get_shape().as_list()
         conv3_flat = tf.reshape(conv3, [-1, conv3_shape[1]*conv3_shape[2]*conv3_shape[3]])
@@ -28,9 +30,10 @@ class AtariNetwork(DqnNetwork):
 
         self.actions = tf.placeholder('int32', shape=[None])
         q_current = tf.reduce_sum(tf.mul(self.q_values, tf.one_hot(self.actions, action_space)), reduction_indices=1)
-        #q_current = tf.mul(self.q_values, self.actions)
-        error = tf.sub(q_new, q_current)
-        loss = tf.reduce_sum(tf.mul(tf.constant(0.5),tf.pow(error, 2)))
+        error = tf.abs(q_new - q_current)
+        quadratic_part = tf.clip_by_value(error, 0.0, 1.0)
+        linear_part = error - quadratic_part
+        loss = tf.reduce_mean(0.5 * tf.square(quadratic_part) + linear_part)
 
         self.optimizer = tf.train.RMSPropOptimizer(self.LEARNING_RATE, momentum = self.MOMENTUM, epsilon=self.MIN_GRAD).minimize(loss)
 
@@ -38,51 +41,67 @@ class AtariNetwork(DqnNetwork):
 from skimage.color import rgb2gray
 from skimage.transform import resize
 class FramePreProcessor():
-    def __init__(self, resize_width, resize_height):
+    def __init__(self, resize_width, resize_height, state_length):
         self.RESIZE_WIDTH = resize_width
         self.RESIZE_HEIGHT = resize_height
+        self.STATE_LENGTH = state_length
 
-    def process(self, frames):
-        processed = np.uint8(resize(rgb2gray(frames), (self.RESIZE_WIDTH, self.RESIZE_HEIGHT, 1)))
-        print("--")
-        print(np.array(processed).shape)
-        return np.array(processed)
+    def process(self, frame, prev_frame):
+        processed_frame = np.maximum(frame, prev_frame)
+        processed_frame = np.uint8(resize(rgb2gray(processed_frame), (self.RESIZE_WIDTH, self.RESIZE_HEIGHT)))
+        processed_frame = [processed_frame for _ in range(self.STATE_LENGTH)]
+        processed_frame = np.concatenate([processed_frame[i][...,np.newaxis] for i in range(self.STATE_LENGTH)] ,axis=2)
+        return processed_frame
 
 RESIZE_WIDTH = 84
 RESIZE_HEIGHT = 84
-NN_INPUT_FRAMENUM = 4
+FRAME_STACK_NUM = 4
+REPLAY_MEMORY_SIZE = 400000
+BATCH_SIZE = 32
+TRAIN_INTERVAL = 4
+TARGET_UPDATE_INTERVAL = 10000
+ACTION_INTERVAL = 4
 
 env = gym.make('Breakout-v0')
 observation = env.reset()
-total_episode = 100
-frame_preprocessor = FramePreProcessor(RESIZE_WIDTH, RESIZE_HEIGHT)
+frame_preprocessor = FramePreProcessor(RESIZE_WIDTH, RESIZE_HEIGHT, FRAME_STACK_NUM)
 
 session = tf.Session()
 state_space = len(observation)
 action_space = env.action_space.n
-model = AtariNetwork(session, RESIZE_WIDTH, RESIZE_HEIGHT, action_space)
-target = AtariNetwork(session, RESIZE_WIDTH, RESIZE_HEIGHT, action_space)
-agent = DqnAgent(session, action_space, model, target)
+model = AtariNetwork(session, RESIZE_WIDTH, RESIZE_HEIGHT, FRAME_STACK_NUM, action_space)
+target = AtariNetwork(session, RESIZE_WIDTH, RESIZE_HEIGHT, FRAME_STACK_NUM, action_space)
+agent = DqnAgent(session, action_space, model, target, ReplayMemory(REPLAY_MEMORY_SIZE, BATCH_SIZE),
+                 TRAIN_INTERVAL, TARGET_UPDATE_INTERVAL, ACTION_INTERVAL, 1000000)
 
-#state = frame_preprocessor.process(frame_queue)
 step = 0
-for ep in range(total_episode):
+TOTAL_EPISODES = 1000
+INITIAL_ACTION_SKIPS = 30
+for ep in range(TOTAL_EPISODES):
     observation = env.reset()
-    agent.begin_episode(frame_preprocessor.process(observation))
-    for t in range(10000000):
+    prev_observation = observation
+    for _ in range(random.randint(1, INITIAL_ACTION_SKIPS)):
+        prev_observation = observation
+        observation, _, _, _ = env.step(0)
+
+    agent.begin_episode(frame_preprocessor.process(observation, prev_observation))
+
+    done = False
+    while not done:
         env.render()
 
         step += 1
         action = agent.get_action()
         observation, reward, done, info = env.step(action)
-        images = frame_preprocessor.process(observation)
-        print(images.shape)
-        if ep % 50 == 0 and t < 300:
+
+        images = frame_preprocessor.process(observation, prev_observation)
+        prev_observation = observation
+
+        if ep % 50 == 0:
             env.render()
             time.sleep(0.05)
         if done:
-            agent.update(step, images, 0, done)
+            agent.update(images, 0, done)
             print(str(ep) + ": Eposode done " + str(t) + ":  " + str(agent.explore_rate))
-            break
 
-        agent.update(step, images, reward, done)
+        agent.update(images, reward, done)
