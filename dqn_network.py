@@ -59,7 +59,5 @@ class DqnNetwork():
         b = tf.Variable(tf.constant(0.1, shape=[filter_num]))
         self.variable_list.append(w)
         self.variable_list.append(b)
-        print(input.get_shape())
-        print(w.get_shape())
         conv1 = tf.nn.conv2d(input, w, strides=[1, stride, stride, 1], padding='VALID')
         return tf.nn.relu(tf.add(conv1, b))

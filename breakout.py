@@ -7,6 +7,8 @@ from dqn_agent import DqnAgent
 from dqn_network import DqnNetwork
 from replay_memory import ReplayMemory
 
+from collections import deque
+
 import functools
 class AtariNetwork(DqnNetwork):
     def __init__(self, session, input_width, input_height, frame_num, action_space, learning_rate = 0.00025 , discount_rate = 0.99):
@@ -41,17 +43,23 @@ class AtariNetwork(DqnNetwork):
 from skimage.color import rgb2gray
 from skimage.transform import resize
 class FramePreProcessor():
-    def __init__(self, resize_width, resize_height, state_length):
+    def __init__(self, resize_width, resize_height, memory_size=4):
         self.RESIZE_WIDTH = resize_width
         self.RESIZE_HEIGHT = resize_height
-        self.STATE_LENGTH = state_length
+        self.MEMORY_SIZE = memory_size
+        self.memory = deque()
 
     def process(self, frame, prev_frame):
         processed_frame = np.maximum(frame, prev_frame)
         processed_frame = np.uint8(resize(rgb2gray(processed_frame), (self.RESIZE_WIDTH, self.RESIZE_HEIGHT)))
-        processed_frame = [processed_frame for _ in range(self.STATE_LENGTH)]
-        processed_frame = np.concatenate([processed_frame[i][...,np.newaxis] for i in range(self.STATE_LENGTH)] ,axis=2)
-        return processed_frame
+        self.memory.append(processed_frame)
+        if len(self.memory) > self.MEMORY_SIZE:
+            self.memory.popleft()
+        output_frames = list(self.memory)
+        while len(output_frames) < self.MEMORY_SIZE:
+            output_frames.append(output_frames[0])
+        output_frames = np.concatenate([output_frames[i][...,np.newaxis] for i in range(self.MEMORY_SIZE)] ,axis=2)
+        return output_frames
 
 RESIZE_WIDTH = 84
 RESIZE_HEIGHT = 84
@@ -61,6 +69,9 @@ BATCH_SIZE = 32
 TRAIN_INTERVAL = 4
 TARGET_UPDATE_INTERVAL = 10000
 ACTION_INTERVAL = 4
+INITIAL_ACTION_SKIPS = 30
+
+SAVE_PATH = "./breakout_ckpt/"
 
 env = gym.make('Breakout-v0')
 observation = env.reset()
@@ -74,34 +85,35 @@ target = AtariNetwork(session, RESIZE_WIDTH, RESIZE_HEIGHT, FRAME_STACK_NUM, act
 agent = DqnAgent(session, action_space, model, target, ReplayMemory(REPLAY_MEMORY_SIZE, BATCH_SIZE),
                  TRAIN_INTERVAL, TARGET_UPDATE_INTERVAL, ACTION_INTERVAL, 1000000)
 
-step = 0
-TOTAL_EPISODES = 1000
-INITIAL_ACTION_SKIPS = 30
-for ep in range(TOTAL_EPISODES):
-    observation = env.reset()
-    prev_observation = observation
-    for _ in range(random.randint(1, INITIAL_ACTION_SKIPS)):
+TOTAL_EPISODES = 1000000
+saver = tf.train.Saver(agent.get_tf_variables())
+
+with open(SAVE_PATH + 'log.txt', 'w') as log:
+    for ep in range(TOTAL_EPISODES):
+        if ep % 1000 == 0:
+            saver.save(session, save_path = SAVE_PATH +str(ep))
+
+        observation = env.reset()
         prev_observation = observation
-        observation, _, _, _ = env.step(0)
+        for _ in range(random.randint(1, INITIAL_ACTION_SKIPS)):
+            prev_observation = observation
+            observation, _, _, _ = env.step(0)
 
-    agent.begin_episode(frame_preprocessor.process(observation, prev_observation))
+        agent.begin_episode(frame_preprocessor.process(observation, prev_observation))
 
-    done = False
-    while not done:
-        env.render()
+        total_reward = 0
+        done = False
+        while not done:
+            action = agent.get_action()
+            observation, reward, done, info = env.step(action)
+            images = frame_preprocessor.process(observation, prev_observation)
+            prev_observation = observation
+            agent.update(images, reward, done)
+            total_reward += reward
 
-        step += 1
-        action = agent.get_action()
-        observation, reward, done, info = env.step(action)
-
-        images = frame_preprocessor.process(observation, prev_observation)
-        prev_observation = observation
-
-        if ep % 50 == 0:
-            env.render()
-            time.sleep(0.05)
-        if done:
-            agent.update(images, 0, done)
-            print(str(ep) + ": Eposode done " + str(t) + ":  " + str(agent.explore_rate))
-
-        agent.update(images, reward, done)
+            if ep % 50 == 0:
+                pass
+                #env.render()
+                #time.sleep(0.05)
+        log.write("{}, {}\n".format(ep, total_reward))
+        print("{}, {}".format(ep, total_reward))
