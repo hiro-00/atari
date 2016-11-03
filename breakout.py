@@ -37,7 +37,7 @@ class AtariNetwork(DqnNetwork):
         linear_part = error - quadratic_part
         loss = tf.reduce_mean(0.5 * tf.square(quadratic_part) + linear_part)
 
-        self.optimizer = tf.train.RMSPropOptimizer(self.LEARNING_RATE, momentum = self.MOMENTUM, epsilon=self.MIN_GRAD).minimize(loss)
+        self.optimizer = tf.train.RMSPropOptimizer(learning_rate, momentum = self.MOMENTUM, epsilon=self.MIN_GRAD).minimize(loss)
 
 
 from skimage.color import rgb2gray
@@ -70,6 +70,7 @@ TRAIN_INTERVAL = 4
 TARGET_UPDATE_INTERVAL = 10000
 ACTION_INTERVAL = 4
 INITIAL_ACTION_SKIPS = 30
+TOTAL_ACTION_NUM = 1000000
 
 SAVE_PATH = "./breakout_ckpt/"
 
@@ -83,7 +84,7 @@ action_space = env.action_space.n
 model = AtariNetwork(session, RESIZE_WIDTH, RESIZE_HEIGHT, FRAME_STACK_NUM, action_space)
 target = AtariNetwork(session, RESIZE_WIDTH, RESIZE_HEIGHT, FRAME_STACK_NUM, action_space)
 agent = DqnAgent(session, action_space, model, target, ReplayMemory(REPLAY_MEMORY_SIZE, BATCH_SIZE),
-                 TRAIN_INTERVAL, TARGET_UPDATE_INTERVAL, ACTION_INTERVAL, 1000000)
+                 TRAIN_INTERVAL, TARGET_UPDATE_INTERVAL, ACTION_INTERVAL, TOTAL_ACTION_NUM)
 
 TOTAL_EPISODES = 1000000
 saver = tf.train.Saver(agent.get_tf_variables())
