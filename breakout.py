@@ -47,19 +47,16 @@ class FramePreProcessor():
         self.RESIZE_WIDTH = resize_width
         self.RESIZE_HEIGHT = resize_height
         self.MEMORY_SIZE = memory_size
-        self.memory = deque()
+        self.memory = np.zeros((self.RESIZE_WIDTH, self.RESIZE_HEIGHT, 1))
 
     def process(self, frame, prev_frame):
         processed_frame = np.maximum(frame, prev_frame)
         processed_frame = np.uint8(resize(rgb2gray(processed_frame), (self.RESIZE_WIDTH, self.RESIZE_HEIGHT)))
-        self.memory.append(processed_frame)
-        if len(self.memory) > self.MEMORY_SIZE:
-            self.memory.popleft()
-        output_frames = list(self.memory)
-        while len(output_frames) < self.MEMORY_SIZE:
-            output_frames.append(output_frames[0])
-        output_frames = np.concatenate([output_frames[i][...,np.newaxis] for i in range(self.MEMORY_SIZE)] ,axis=2)
-        return output_frames
+        processed_frame = np.reshape(processed_frame, (self.RESIZE_WIDTH, self.RESIZE_HEIGHT, 1))
+        while self.memory.shape[2] < self.MEMORY_SIZE:
+            self.memory = np.append(self.memory[:, :, :], processed_frame, axis=2)
+        self.memory = np.append(self.memory[:, :, 1:], processed_frame, axis=2)
+        return self.memory
 
 RESIZE_WIDTH = 84
 RESIZE_HEIGHT = 84
@@ -70,7 +67,7 @@ TRAIN_INTERVAL = 4
 TARGET_UPDATE_INTERVAL = 10000
 ACTION_INTERVAL = 4
 INITIAL_ACTION_SKIPS = 30
-TOTAL_ACTION_NUM = 1000000
+TOTAL_ACTION_NUM = 5000000
 
 SAVE_PATH = "./breakout_ckpt/"
 
@@ -86,9 +83,10 @@ target = AtariNetwork(session, RESIZE_WIDTH, RESIZE_HEIGHT, FRAME_STACK_NUM, act
 agent = DqnAgent(session, action_space, model, target, ReplayMemory(REPLAY_MEMORY_SIZE, BATCH_SIZE),
                  TRAIN_INTERVAL, TARGET_UPDATE_INTERVAL, ACTION_INTERVAL, TOTAL_ACTION_NUM)
 
-TOTAL_EPISODES = 1000000
+TOTAL_EPISODES = 50000
 saver = tf.train.Saver(agent.get_tf_variables())
 
+tick = 0
 with open(SAVE_PATH + 'log.txt', 'w') as log:
     for ep in range(TOTAL_EPISODES):
         if ep % 1000 == 0:
@@ -105,6 +103,7 @@ with open(SAVE_PATH + 'log.txt', 'w') as log:
         total_reward = 0
         done = False
         while not done:
+            tick += 1
             action = agent.get_action()
             observation, reward, done, info = env.step(action)
             images = frame_preprocessor.process(observation, prev_observation)
@@ -116,5 +115,6 @@ with open(SAVE_PATH + 'log.txt', 'w') as log:
                 pass
                 #env.render()
                 #time.sleep(0.05)
-        log.write("{}, {}\n".format(ep, total_reward))
-        print("{}, {}".format(ep, total_reward))
+        print(total_reward)
+        log.write("{}, {},   {}\n".format(ep, total_reward, tick))
+        print("{}, {},     {}".format(ep, total_reward, tick))
