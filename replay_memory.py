@@ -20,7 +20,6 @@ class ReplayMemory():
             self.memory.popleft()
 
     def get(self, size = None):
-        print(asizeof.asizeof(self.memory))
         if size == None:
             batch_size = self.batch_size
         batch_size = min(batch_size, len(self.memory))

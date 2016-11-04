@@ -41,23 +41,28 @@ class AtariNetwork(DqnNetwork):
 
 from skimage.color import rgb2gray
 from skimage.transform import resize
+
 class FramePreProcessor():
     def __init__(self, resize_width, resize_height, memory_size=4):
         self.RESIZE_WIDTH = resize_width
         self.RESIZE_HEIGHT = resize_height
         self.MEMORY_SIZE = memory_size
-        self.memory = np.zeros((self.RESIZE_WIDTH, self.RESIZE_HEIGHT, 1))
+        self.memory = deque()
 
     def process(self, frame, prev_frame):
         processed_frame = np.maximum(frame, prev_frame)
         processed_frame = np.uint8(resize(rgb2gray(processed_frame), (self.RESIZE_WIDTH, self.RESIZE_HEIGHT)))
         processed_frame = np.reshape(processed_frame, (self.RESIZE_WIDTH, self.RESIZE_HEIGHT, 1))
-        while self.memory.shape[2] < self.MEMORY_SIZE:
-            self.memory = np.append(self.memory[:, :, :], processed_frame, axis=2)
-        tmp = np.copy(self.memory[:, :, 1:])
-        del self.memory
-        self.memory = np.append(tmp, processed_frame, axis=2)
-        return self.memory
+
+        self.memory.append(processed_frame)
+        if len(self.memory) > self.MEMORY_SIZE:
+            self.memory.popleft()
+        output_frames = list(self.memory)
+        while len(output_frames) < self.MEMORY_SIZE:
+            output_frames.append(output_frames[0])
+        result = np.concatenate(output_frames ,axis=2)
+        return result
+
 
 RESIZE_WIDTH = 84
 RESIZE_HEIGHT = 84
