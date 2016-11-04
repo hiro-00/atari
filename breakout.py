@@ -39,7 +39,6 @@ class AtariNetwork(DqnNetwork):
 
         self.optimizer = tf.train.RMSPropOptimizer(learning_rate, momentum = self.MOMENTUM, epsilon=self.MIN_GRAD).minimize(loss)
 
-
 from skimage.color import rgb2gray
 from skimage.transform import resize
 class FramePreProcessor():

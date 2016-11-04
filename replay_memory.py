@@ -2,6 +2,7 @@ from collections import namedtuple
 import random
 from collections import deque
 
+from pympler import asizeof
 
 class ReplayMemory():
     def __init__(self, memory_size = 500, batch_size = 50):
@@ -19,6 +20,7 @@ class ReplayMemory():
             self.memory.popleft()
 
     def get(self, size = None):
+        print(asizeof.asizeof(self.memory))
         if size == None:
             batch_size = self.batch_size
         batch_size = min(batch_size, len(self.memory))
