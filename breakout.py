@@ -115,6 +115,5 @@ with open(SAVE_PATH + 'log.txt', 'w') as log:
                 pass
                 #env.render()
                 #time.sleep(0.05)
-        print(total_reward)
         log.write("{}, {},   {}\n".format(ep, total_reward, tick))
         print("{}, {},     {}".format(ep, total_reward, tick))
