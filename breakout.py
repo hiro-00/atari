@@ -56,7 +56,7 @@ class FramePreProcessor():
         while self.memory.shape[2] < self.MEMORY_SIZE:
             self.memory = np.append(self.memory[:, :, :], processed_frame, axis=2)
         self.memory = np.append(self.memory[:, :, 1:], processed_frame, axis=2)
-        return self.memory
+        return np.copy(self.memory)
 
 RESIZE_WIDTH = 84
 RESIZE_HEIGHT = 84
