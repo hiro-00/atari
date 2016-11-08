@@ -14,17 +14,10 @@ class DqnNetwork():
     def get_variables(self):
         return self.variable_list
 
-    def copy_variables(self, model):
-        new_variables = model.get_variables()
-        copy_func = []
-        for i, _ in enumerate(self.variable_list):
-            copy_func.append(self.variable_list[i].assign(new_variables[i]))
-        self.session.run(copy_func)
-
     def train(self, state, reward, next_q, action):
         self.session.run(self.optimizer, feed_dict=
                            {
-                            self.input : state,
+                            self.input : np.float32(np.array(state)/255.0),
                             self.reward : reward,
                             self.next_q : next_q,
                             self.actions : action
@@ -32,18 +25,16 @@ class DqnNetwork():
 
     def eval(self, state):
         state = np.array([state])
-        return self.session.run(self.q_values, feed_dict = {self.input : state})
+        return self.session.run(self.q_values, feed_dict = {self.input : np.float32(state/255.0)})
 
 
     def _add_hidden_layer(self, input, node_num):
-        print(input.get_shape())
         dim = int(input.get_shape()[1])
-        flat_input = input
         w = tf.Variable(tf.random_normal(shape=[dim, node_num], stddev=0.01))
         b = tf.Variable(tf.constant(0.1, shape=[node_num]))
         self.variable_list.append(w)
         self.variable_list.append(b)
-        return tf.nn.relu(tf.add(tf.matmul(flat_input, w), b))
+        return tf.nn.relu(tf.add(tf.matmul(input, w), b))
 
     def _add_output_layer(self, input, node_num):
         dim = int(input.get_shape()[1])

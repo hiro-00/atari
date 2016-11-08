@@ -37,7 +37,7 @@ class AtariNetwork(DqnNetwork):
         linear_part = error - quadratic_part
         loss = tf.reduce_mean(0.5 * tf.square(quadratic_part) + linear_part)
 
-        self.optimizer = tf.train.RMSPropOptimizer(learning_rate, momentum = self.MOMENTUM, epsilon=self.MIN_GRAD).minimize(loss)
+        self.optimizer = tf.train.RMSPropOptimizer(learning_rate, momentum = self.MOMENTUM, epsilon=self.MIN_GRAD).minimize(loss, var_list=self.get_variables())
 
 from skimage.color import rgb2gray
 from skimage.transform import resize
@@ -51,7 +51,10 @@ class FramePreProcessor():
 
     def process(self, frame, prev_frame):
         processed_frame = np.maximum(frame, prev_frame)
-        processed_frame = np.uint8(resize(rgb2gray(processed_frame), (self.RESIZE_WIDTH, self.RESIZE_HEIGHT)))
+        processed_frame = rgb2gray(processed_frame)
+        processed_frame = resize(processed_frame, (self.RESIZE_WIDTH, self.RESIZE_HEIGHT))
+        processed_frame = np.uint8(processed_frame * 255)
+
         processed_frame = np.reshape(processed_frame, (self.RESIZE_WIDTH, self.RESIZE_HEIGHT, 1))
 
         self.memory.append(processed_frame)
@@ -73,7 +76,7 @@ TRAIN_INTERVAL = 4
 TARGET_UPDATE_INTERVAL = 10000
 ACTION_INTERVAL = 4
 INITIAL_ACTION_SKIPS = 30
-TOTAL_ACTION_NUM = 5000000
+TOTAL_ACTION_NUM = 1000000
 
 SAVE_PATH = "./breakout_ckpt/"
 
@@ -99,7 +102,6 @@ with open(SAVE_PATH + 'log.txt', 'w') as log:
             saver.save(session, save_path = SAVE_PATH +str(ep))
 
         observation = env.reset()
-        prev_observation = observation
         for _ in range(random.randint(1, INITIAL_ACTION_SKIPS)):
             prev_observation = observation
             observation, _, _, _ = env.step(0)

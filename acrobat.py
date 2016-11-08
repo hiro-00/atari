@@ -47,7 +47,7 @@ target = AcrobatNn(session, state_space, action_space, LEARNING_RATE, DISCOUNT_R
 agent = DqnAgent(session, action_space, model, target, ReplayMemory())
 step = 0
 saver = tf.train.Saver(agent.get_tf_variables())
-saver.restore(session, save_path='acrobat_ckpt/150')
+#saver.restore(session, save_path='acrobat_ckpt/150')
 for ep in range(total_episode):
     if ep % 50 == 0:
         saver.save(session, save_path="./acrobat_ckpt/"+str(ep))
@@ -59,7 +59,7 @@ for ep in range(total_episode):
         action = agent.get_action()
         observation, reward, done, info = env.step(action)
         if ep %50==0 and t < 300:
-            env.render()
+            #env.render()
             time.sleep(0.05)
         if done:
             agent.update(observation, 1000, done)
