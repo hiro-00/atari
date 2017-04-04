@@ -1,4 +1,6 @@
-# A python implementation of reinforcement learning algorithms
+# Reinforcement learning algorithms
+
+A python implementation of reinforcement learning algorithms
 
 * Q-learning
 * Deep Q network
